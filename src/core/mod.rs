@@ -1,4 +1,10 @@
-mod req;
-mod client;
+pub mod req;
+pub mod client;
+pub mod biz;
 
-const MAX_BLOCK_SIZE: usize = 1024 * 1024 * 16; // 16 MB
+#[allow(unused)]
+pub const MAX_BLOCK_SIZE: usize = 16 * MB;
+
+pub const KB: usize = 1024;
+pub const MB: usize = 1024 * KB;
+pub const GB: usize = 1024 * MB;

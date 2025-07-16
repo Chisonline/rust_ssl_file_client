@@ -4,6 +4,7 @@ use std::{io::{Read, Write}, net::TcpStream};
 mod core;
 mod utils;
 mod control;
+mod file;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = SslConnector::builder(SslMethod::tls())?;

@@ -14,9 +14,9 @@ pub struct Payload<T>
 where
     T: Serialize,
 {
-    method: String,
-    block: Option<ControlBlock>,
-    content: Option<T>,
+    pub method: String,
+    pub block: Option<ControlBlock>,
+    pub content: Option<T>,
 }
 
 async fn make_req<T>(payload: Payload<T>) -> String
@@ -40,12 +40,12 @@ pub struct Resp<R>
 where
     R: DeserializeOwned,
 {
-    success: bool,
-    block: Option<ControlBlock>,
-    content: Option<R>,
+    pub success: bool,
+    pub block: Option<ControlBlock>,
+    pub content: Option<R>,
 }
 
-pub async fn req<T, R>(payload: Payload<T>) -> Result<Resp<R>, Box<dyn std::error::Error>>
+pub async fn req_server<T, R>(payload: Payload<T>) -> Result<Resp<R>, Box<dyn std::error::Error>>
 where T: Serialize, R:DeserializeOwned
 {
     let req = make_req(payload).await;
