@@ -1,0 +1,92 @@
+use std::process::exit;
+
+use dashmap::DashMap;
+use tokio::{io::{AsyncReadExt, AsyncWriteExt}, sync::OnceCell};
+
+use crate::{control::ControlBlock, file::info};
+
+use tokio::io::{AsyncBufReadExt, BufReader};
+
+mod file;
+
+pub async fn terminal() -> ! {
+    let mut block = ControlBlock::default();
+    let mut user: Option<String> = None;
+    loop {
+        let (cmd, args) = input(user.clone()).await;
+        match cmd.as_str() {
+            "help" => help(args).await,
+            "exit" => exit(0),
+            "" => continue,
+            _ => println!("unknown command: {}", cmd),
+        }
+    }
+}
+
+pub async fn help(args: Option<Vec<String>>) {
+    let infos = get_help_info().await;
+    if let Some(args) = args {
+        if let Some(info) = infos.get(&args[0]) {
+            println!("{}", info.value());
+            return;
+        } else {
+            println!("help info of {} not found", args[0]);
+            return;
+        }
+    }
+
+    let mut info_vec: Vec<String> = infos.iter().map(|info| info.value().to_owned()).collect::<Vec<String>>();
+    info_vec.sort();
+    for value in info_vec {
+        println!("{}", value);
+    }
+}
+
+static HELP_INFO: OnceCell<DashMap<String, String>> = OnceCell::const_new();
+
+async fn get_help_info() -> &'static DashMap<String, String> {
+    HELP_INFO.get_or_init(|| async {
+        let map = DashMap::new();
+        map.insert("help".to_string(), "help      [args]                 : print help info".to_string());
+        map.insert("delete".to_string(), "delete    [file_id]              : delete file from server".to_string());
+        map.insert("download".to_string(), "download  [file_id] [file_name]  : download file from server".to_string());
+        map.insert("exit".to_string(), "exit                             : exit terminal".to_string());
+        map.insert("get_file".to_string(), "get_file  [file_id] [file_name]  : get file from server".to_string());
+        map.insert("list_file".to_string(), "list_file [filter]               : list file in server, using filter as searching keyword".to_string());
+        map.insert("login".to_string(), "login     [user_name] [password] : login to server".to_string());
+        map.insert("register".to_string(), "register  [user_name] [password] : register to server".to_string());
+        map.insert("upload".to_string(), "upload    [file_name]            : upload file to server".to_string());
+        map
+    }).await
+}
+
+async fn input(user: Option<String>) -> (String, Option<Vec<String>>) {
+    
+    let mut stdout = tokio::io::stdout();
+    if let Some(user) = user {
+        stdout.write_all(format!("{user} > ").as_bytes()).await.unwrap();
+    } else {
+        stdout.write_all(b"user > ").await.unwrap();
+    }
+    stdout.flush().await.unwrap();
+
+    let stdin = tokio::io::stdin();
+    let mut reader = BufReader::new(stdin);
+    let mut input = String::new();
+    reader.read_line(&mut input).await.unwrap();
+    let input = input.trim();
+    let mut args = input.split_whitespace();
+    let cmd = args.next().unwrap_or("").to_string();
+    let args = args.map(|arg| arg.to_string()).collect::<Vec<_>>();
+    let args = if args.len() > 0 {
+        Some(args)
+    } else {
+        None
+    };
+    clear_terminal().await;
+    (cmd, args)
+}
+
+async fn clear_terminal() {
+    print!("\x1B[2J\x1B[1;1H");
+}

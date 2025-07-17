@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::sync::Semaphore;
+use tokio::{io::AsyncWriteExt as _, sync::Semaphore};
 use uuid::Uuid;
 
 use crate::{control::ControlBlock, core::biz};
@@ -41,7 +41,9 @@ pub async fn download(
                         let name = format!("{}_{}", prefix, block_info.id);
                         let path = format!("{}/{name}", target_path.clone());
 
-                        tokio::fs::write(&path, block_data).await;
+                        if let Ok(_) = tokio::fs::write(&path, block_data).await {
+                            break
+                        }
                     }
                 }
             })
@@ -53,6 +55,8 @@ pub async fn download(
     }
 
     let block_vec = search_files_by_prefix(target_path, prefix.as_str()).await?;
+
+    join_files(block_vec, target_path, &format!("{}.bin", file_id)).await?;
 
     Ok(())
 }
@@ -74,4 +78,15 @@ async fn search_files_by_prefix(dir: &str, prefix: &str) -> Result<Vec<String>, 
     files.sort();
 
     Ok(files)
+}
+
+async fn join_files(block_vec: Vec<String>, target_path: &str, target_file_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut file = tokio::fs::File::create(format!("{}/{}", target_path, target_file_name)).await?;
+
+    for block in block_vec {
+        let block_data = tokio::fs::read(format!("{}/{block}", target_path)).await?;
+        file.write_all(&block_data).await?;
+    }
+
+    Ok(())
 }

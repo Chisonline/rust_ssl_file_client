@@ -1,2 +1,3 @@
-mod upload;
-mod download;
+pub mod upload;
+pub mod download;
+pub mod info;
