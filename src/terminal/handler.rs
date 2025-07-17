@@ -44,7 +44,7 @@ pub async fn register(block: &mut ControlBlock, args: Option<Vec<String>>) -> Op
         },
     };
 
-    let resp = user::login::login(block, user_name.clone(), passwd).await;
+    let resp = user::login::register(block, user_name.clone(), passwd).await;
     match resp {
         Ok(_) => {
             Some(user_name)

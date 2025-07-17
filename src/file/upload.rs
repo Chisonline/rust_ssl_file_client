@@ -1,10 +1,9 @@
 use std::sync::Arc;
 
 use crc_fast::{checksum, checksum_combine, CrcAlgorithm::Crc32IsoHdlc};
-use serde::{Deserialize, Serialize};
-use tokio::{io::{self, AsyncReadExt, AsyncSeekExt}, sync::{mpsc::Permit, Semaphore}};
+use tokio::{io::{self, AsyncReadExt, AsyncSeekExt}, sync:: Semaphore};
 
-use crate::{control::ControlBlock, core::{req::{req_server, Payload, Resp}, GB, KB, MB}, core::biz};
+use crate::{control::ControlBlock, core::{GB, KB, MB}, core::biz};
 
 pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Result<(), Box<dyn std::error::Error>> {
     let metadata = tokio::fs::metadata(format!("{}/{}", path, file_name)).await?;
@@ -13,7 +12,7 @@ pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Resul
 
     let semaphore = Arc::new(Semaphore::new(8));
     let mut handles = Vec::new();
-    let file = tokio::fs::File::open(path).await?;
+    let file = tokio::fs::File::open(format!("{}/{}", path, file_name)).await?;
     let mut buffer = Vec::with_capacity(granularity);
     let mut position = 0;
 

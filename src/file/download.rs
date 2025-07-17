@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use tokio::{io::AsyncWriteExt as _, sync::Semaphore};
 use uuid::Uuid;
@@ -21,6 +21,8 @@ pub async fn download(
 
     let prefix = make_prefix(file_id);
 
+    let mutex_flag = Arc::new(Mutex::new(true));
+
     let handles = block_ids
         .iter()
         .map(|block_id| {
@@ -30,9 +32,16 @@ pub async fn download(
             let prefix = prefix.clone();
             let target_path = target_path.to_owned();
 
+            let mutex_flag = mutex_flag.clone();
+
             tokio::task::spawn(async move {
                 let _permit = semaphore.acquire().await.unwrap();
+                let mut success = false;
                 for _ in 0..3 {
+                    if !*mutex_flag.lock().unwrap() {
+                        break;
+                    }
+
                     let block_use = block.clone();
                     let rst = biz::get_block(block_use, block_id).await;
                     if let Some(resp) = rst {
@@ -41,10 +50,23 @@ pub async fn download(
                         let name = format!("{}_{}", prefix, block_info.id);
                         let path = format!("{}/{name}", target_path.clone());
 
-                        if let Ok(_) = tokio::fs::write(&path, block_data).await {
-                            break
-                        }
+                        let mut file = match tokio::fs::File::create(path).await {
+                            Ok(file) => file,
+                            Err(_) => continue,
+                        };
+
+                        match file.write_all(&block_data).await {
+                            Ok(_) => {
+                                success = true;
+                                break;
+                            },
+                            Err(_) => continue,
+                        };
                     }
+                }
+
+                if !success {
+                    *mutex_flag.lock().unwrap() = false;
                 }
             })
         })
@@ -52,6 +74,10 @@ pub async fn download(
 
     for handle in handles {
         handle.await?;
+    }
+
+    if !*mutex_flag.lock().unwrap() {
+        return Ok(());
     }
 
     let block_vec = search_files_by_prefix(target_path, prefix.as_str()).await?;

@@ -1,13 +1,14 @@
+use anstyle::{Color, RgbColor, Style};
+use base64::{engine::general_purpose, Engine as _};
 use openssl::ssl::{SslConnector, SslMethod};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{
-    io::{Read as _, Write as _},
-    net::TcpStream,
+    fmt::Debug, io::{Read as _, Write as _}, net::TcpStream
 };
 
 use crate::{
     control::ControlBlock,
-    core::{MAX_BLOCK_SIZE, client::get_config},
+    core::client::get_config, terminal::async_print,
 };
 
 pub struct Payload<T>
@@ -24,11 +25,17 @@ where
     T: Serialize,
 {
     let content = match payload.content {
-        Some(content) => serde_json::to_string(&content).unwrap(),
+        Some(content) => {
+            let json_str = serde_json::to_string(&content).unwrap();
+            general_purpose::STANDARD.encode(json_str)
+        },
         None => "".to_string(),
     };
     let block = match payload.block {
-        Some(block) => serde_json::to_string(&block).unwrap(),
+        Some(block) => {
+            let json_str = serde_json::to_string(&block).unwrap();
+            general_purpose::STANDARD.encode(json_str)
+        },
         None => ".".to_string(),
     };
 
@@ -46,11 +53,13 @@ where
 }
 
 pub async fn req_server<T, R>(payload: Payload<T>) -> Result<Resp<R>, Box<dyn std::error::Error>>
-where T: Serialize, R:DeserializeOwned
+where T: Serialize, R:DeserializeOwned + Debug
 {
     let req = make_req(payload).await;
 
     let resp = send_req(req).await?;
+
+    async_debug(resp.clone()).await;
 
     let resp: Resp<R> = split_resp(resp).await;
 
@@ -86,15 +95,19 @@ async fn send_req(payload: String) -> Result<String, Box<dyn std::error::Error>>
     }
 
     let response = String::from_utf8(buffer)?;
-
-    Ok(response)
+    let response = response.trim();
+    
+    Ok(response.to_owned())
 }
 
 async fn split_resp<T>(resp: String) -> Resp<T>
 where
-    T: DeserializeOwned,
+    T: DeserializeOwned + Debug,
 {
-    let mut parts = resp.splitn(3, " ");
+    let bytes = resp.bytes();
+    async_debug(format!("{:?}", bytes)).await;
+
+    let mut parts = resp.split(" ");
 
     let success = match parts.next().unwrap().to_string().as_str() {
         "true" => true,
@@ -103,14 +116,26 @@ where
     };
 
     let block = match parts.next() {
-        Some(str) => serde_json::from_str(str).unwrap_or(None),
+        Some(str) => {
+            match general_purpose::STANDARD.decode(str) {
+                Ok(block_str) => serde_json::from_slice(&block_str).unwrap_or(None),
+                Err(_) => None,
+            }
+        },
         None => None,
     };
 
     let content = match parts.next() {
-        Some(str) => serde_json::from_str(str).unwrap_or(None),
+        Some(str) => {
+            match general_purpose::STANDARD.decode(str) {
+                Ok(content_str) => serde_json::from_slice(&content_str).unwrap_or(None),
+                Err(_) => None,
+            }
+        },
         None => None,
     };
+
+    async_debug(format!("{} {:?} {:?}", success, block, content)).await;
 
     Resp {
         success,
@@ -124,11 +149,19 @@ mod test {
     #[tokio::test]
     async fn test_split() {
         use super::*;
-        let resp = "true . 123".to_string();
+        let resp = "true . Mw==".to_string();
         let resp: Resp<u32> = split_resp(resp).await;
         assert_eq!(resp.success, true);
-        assert_eq!(resp.content, Some(123));
+        assert_eq!(resp.content, Some(3));
         assert!(resp.block.is_none());
         println!("{:?}", resp)
     }
+}
+
+async fn async_debug(buffer: String) {
+
+    let style = Style::new().bold().fg_color(Some(Color::Rgb(RgbColor(128, 196, 0))));
+
+    let buffer = format!("{style}[DEBUG]{style:#} {}", buffer);
+    async_print(buffer).await
 }

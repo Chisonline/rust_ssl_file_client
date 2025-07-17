@@ -2,7 +2,7 @@ use std::process::exit;
 
 use dashmap::DashMap;
 use tokio::{io::AsyncWriteExt, sync::OnceCell};
-use crate::control::ControlBlock;
+use crate::{control::ControlBlock, user::authorization::refresh};
 use handler::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
@@ -11,8 +11,17 @@ mod handler;
 pub async fn terminal() -> ! {
     let mut block = ControlBlock::default();
     let mut user: Option<String> = None;
+
     loop {
+
+        if let Some(_) = user {
+            if let Err(e) = refresh(&mut block).await {
+                panic!("refresh token failed: {:?}", e);
+            }
+        }
+
         let (cmd, args) = input(user.clone()).await;
+
         match cmd.as_str() {
             "help" => help(args).await,
             "exit" => exit(0),
@@ -36,10 +45,10 @@ pub async fn help(args: Option<Vec<String>>) {
     let infos = get_help_info().await;
     if let Some(args) = args {
         if let Some(info) = infos.get(&args[0]) {
-            println!("{}", info.value());
+            async_print(format!("{}", info.value())).await;
             return;
         } else {
-            println!("help info of {} not found", args[0]);
+            async_print(format!("help info of {} not found", args[0])).await;
             return;
         }
     }
@@ -47,7 +56,7 @@ pub async fn help(args: Option<Vec<String>>) {
     let mut info_vec: Vec<String> = infos.iter().map(|info| info.value().to_owned()).collect::<Vec<String>>();
     info_vec.sort();
     for value in info_vec {
-        println!("{}", value);
+        async_print(format!("{}", value)).await;
     }
 }
 
@@ -99,6 +108,7 @@ async fn clear_terminal() {
 
 pub async fn async_print(buffer: String) {
     let mut stdout = tokio::io::stdout();
+    let buffer = format!("\n{buffer}");
     stdout.write_all(buffer.as_bytes()).await.unwrap();
     stdout.flush().await.unwrap();
 }

@@ -93,12 +93,12 @@ pub async fn finish(block: ControlBlock, file_id: u32, file_checksum: u32) -> Re
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct GetBlockIdsByFileIdReq {
     file_id: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct GetBlockIdsByFileIdResp {
     pub block_ids: Vec<i32>,
 }
@@ -131,13 +131,13 @@ pub struct GetBlockReq {
     block_id: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct GetBlockResp {
     pub block_info: FileBlock,
     pub block_data: Vec<u8>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct FileBlock {
     pub id: i32,
     pub file_id: i32,
@@ -176,7 +176,7 @@ pub struct ListFileReq {
     filter: String
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ListFileResp {
     pub file_info: Vec<FileInfo>,
 }
@@ -210,7 +210,7 @@ pub async fn list_file(filter: String) -> Result<ListFileResp, Box<dyn std::erro
 
     match resp.content {
         Some(file_info) => Ok(file_info),
-        None => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "list_file failed"))),
+        None => Ok(ListFileResp { file_info: Vec::new() }),
     }
 }
 
@@ -239,6 +239,7 @@ pub async fn delete_file(block: ControlBlock, file_id: i32) -> Result<(), Box<dy
     Ok(())
 }
 
+#[allow(unused)]
 pub async fn ping() -> Result<(), Box<dyn std::error::Error>> {
     let payload: Payload<u32> = Payload {
         method: "ping".to_string(),
