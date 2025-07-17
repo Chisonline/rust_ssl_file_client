@@ -178,17 +178,17 @@ pub struct ListFileReq {
 
 #[derive(Deserialize)]
 pub struct ListFileResp {
-    file_info: Vec<FileInfo>,
+    pub file_info: Vec<FileInfo>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileInfo {
-    id: i32,
+    pub id: i32,
     pub file_name: String,
-    file_size: i64,
-    file_checksum: u32,
-    file_status: i32,
-    created_at: NaiveDateTime,
+    pub file_size: i64,
+    pub file_checksum: u32,
+    pub file_status: i32,
+    pub created_at: NaiveDateTime,
 }
 
 pub async fn list_file(filter: String) -> Result<ListFileResp, Box<dyn std::error::Error>> {

@@ -7,7 +7,7 @@ use tokio::{io::{self, AsyncReadExt, AsyncSeekExt}, sync::{mpsc::Permit, Semapho
 use crate::{control::ControlBlock, core::{req::{req_server, Payload, Resp}, GB, KB, MB}, core::biz};
 
 pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Result<(), Box<dyn std::error::Error>> {
-    let metadata = tokio::fs::metadata(&path).await?;
+    let metadata = tokio::fs::metadata(format!("{}/{}", path, file_name)).await?;
     let file_size = metadata.len() as usize;
     let granularity = calcu_granularity(file_size);
 
