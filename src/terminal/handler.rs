@@ -150,8 +150,18 @@ pub async fn upload(block: ControlBlock, args: Option<Vec<String>>) {
     }
 }
 
-pub async fn list_file() {
-    let resp = file::info::list_file("".to_string()).await;
+pub async fn list_file(args: Option<Vec<String>>) {
+    let filter = match args {
+        Some(args) => {
+            if args.len() < 1 {
+                "".to_string()
+            } else {
+                args[0].clone()
+            }
+        },
+        None => "".to_string()
+    };
+    let resp = file::info::list_file(filter).await;
     match resp {
         Ok(resp) => {
             #[derive(Tabled)]

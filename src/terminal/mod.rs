@@ -34,7 +34,7 @@ pub async fn terminal() -> ! {
             "delete" => delete(block.clone(), args).await,
             "download" => download(block.clone(), args).await,
             "upload" => upload(block.clone(), args).await,
-            "list_file" => list_file().await,
+            "list_file" => list_file(args).await,
             "" => continue,
             _ => println!("unknown command: {}", cmd),
         }
