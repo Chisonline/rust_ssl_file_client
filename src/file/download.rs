@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
-
+use crc_fast::{checksum,  checksum_file, CrcAlgorithm::Crc32IsoHdlc};
 use tokio::{io::AsyncWriteExt as _, sync::Semaphore};
 use uuid::Uuid;
 
-use crate::{control::ControlBlock, core::biz};
+use crate::{control::ControlBlock, core::{biz, req::async_debug}};
 
 fn make_prefix(file_id: i32) -> String {
     let uuid = Uuid::new_v4();
@@ -47,7 +47,13 @@ pub async fn download(
                     if let Some(resp) = rst {
                         let block_info = resp.block_info;
                         let block_data = resp.block_data;
-                        let name = format!("{}_{}", prefix, block_info.id);
+
+                        let block_checksum = block_info.block_checksum;
+                        if block_checksum != checksum(Crc32IsoHdlc, &block_data) as u32 {
+                            continue;
+                        }
+
+                        let name = format!("{}_{}", prefix, block_info.block_id);
                         let path = format!("{}/{name}", target_path.clone());
 
                         let mut file = match tokio::fs::File::create(path).await {
@@ -76,13 +82,24 @@ pub async fn download(
         handle.await?;
     }
 
-    if !*mutex_flag.lock().unwrap() {
-        return Ok(());
+    let flag = *mutex_flag.lock().unwrap();
+    async_debug(format!("mutex_flag: {flag}")).await;
+
+    if !flag {
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Download failed")));
     }
+
+    let file_info = biz::get_file_info(file_id).await?;
+    async_debug(format!("{:?}", file_info)).await;
+    let file_name = file_info.file_name;
+    let file_checksum = file_info.file_checksum;
 
     let block_vec = search_files_by_prefix(target_path, prefix.as_str()).await?;
 
-    join_files(block_vec, target_path, &format!("{}.bin", file_id)).await?;
+    async_debug(format!("{:?}", block_vec)).await;
+    join_files(block_vec.clone(), target_path, &format!("{}", file_name)).await?;
+
+    check_file(target_path, &format!("{}", file_name), file_checksum).await?;
 
     Ok(())
 }
@@ -101,7 +118,15 @@ async fn search_files_by_prefix(dir: &str, prefix: &str) -> Result<Vec<String>, 
         }
     }
 
-    files.sort();
+    files.sort_by_key(|file| {
+        let parts: Vec<&str> = file.split('_').collect();
+        if let Some(last_part) = parts.last() {
+            if let Ok(num) = last_part.parse::<u32>() {
+                return num;
+            }
+        }
+        u32::MAX
+    });
 
     Ok(files)
 }
@@ -109,10 +134,35 @@ async fn search_files_by_prefix(dir: &str, prefix: &str) -> Result<Vec<String>, 
 async fn join_files(block_vec: Vec<String>, target_path: &str, target_file_name: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut file = tokio::fs::File::create(format!("{}/{}", target_path, target_file_name)).await?;
 
-    for block in block_vec {
-        let block_data = tokio::fs::read(format!("{}/{block}", target_path)).await?;
+    for block in &block_vec {
+        let block_data = tokio::fs::read(block).await?;
         file.write_all(&block_data).await?;
     }
 
+    for block in block_vec {
+        tokio::fs::remove_file(block).await?;
+    }
+
     Ok(())
+}
+
+async fn check_file(target_path: &str, target_file_name: &str, file_checksum: u32) -> Result<(), Box<dyn std::error::Error>> {
+    
+    let crc32 = checksum_file(Crc32IsoHdlc, &format!("{}/{}", target_path, target_file_name), None)?;
+
+    if crc32 as u32 != file_checksum {
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("check_file failed, {} vs {}", crc32, file_checksum))));
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_search_by_prefix() {
+    let dir = "./download";
+    let prefix = "26_";
+    let rst = search_files_by_prefix(dir, prefix).await.unwrap();
+    for strr in rst {
+        println!("{}", strr)
+    }
 }

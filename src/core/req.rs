@@ -11,6 +11,7 @@ use crate::{
     core::client::get_config, terminal::async_print,
 };
 
+#[derive(Debug)]
 pub struct Payload<T>
 where
     T: Serialize,
@@ -53,9 +54,13 @@ where
 }
 
 pub async fn req_server<T, R>(payload: Payload<T>) -> Result<Resp<R>, Box<dyn std::error::Error>>
-where T: Serialize, R:DeserializeOwned + Debug
+where T: Serialize + Debug, R:DeserializeOwned + Debug
 {
+    async_debug(format!("raw payload: {:?}", payload)).await;
+
     let req = make_req(payload).await;
+
+    async_debug(format!("b64 payload: {}", req)).await;
 
     let resp = send_req(req).await?;
 
@@ -65,6 +70,8 @@ where T: Serialize, R:DeserializeOwned + Debug
 
     Ok(resp)
 }
+
+const END_MARK: &str = "\n\n\n";
 
 async fn send_req(payload: String) -> Result<String, Box<dyn std::error::Error>> {
     let client_config = get_config().await;
@@ -81,7 +88,8 @@ async fn send_req(payload: String) -> Result<String, Box<dyn std::error::Error>>
     let stream = TcpStream::connect(format!("{}:{}", addr, port))?;
     let mut ssl_stream = connector.connect(domain, stream)?;
 
-    ssl_stream.write_all(payload.as_bytes())?;
+    ssl_stream.write_all(format!("{}{}", payload, END_MARK).as_bytes())?;
+    ssl_stream.flush()?;
 
     let mut buffer = Vec::new();
     let mut temp_buffer = [0; 1024];
@@ -92,6 +100,11 @@ async fn send_req(payload: String) -> Result<String, Box<dyn std::error::Error>>
             break;
         }
         buffer.extend_from_slice(&temp_buffer[0..n]);
+
+        if buffer.ends_with(END_MARK.as_bytes()) {
+            buffer.truncate(buffer.len() - END_MARK.len());
+            break;
+        }
     }
 
     let response = String::from_utf8(buffer)?;
@@ -158,7 +171,13 @@ mod test {
     }
 }
 
-async fn async_debug(buffer: String) {
+pub async fn async_debug(buffer: String) {
+
+    let client_config = get_config().await;
+
+    if !client_config.debug {
+        return;
+    }
 
     let style = Style::new().bold().fg_color(Some(Color::Rgb(RgbColor(128, 196, 0))));
 

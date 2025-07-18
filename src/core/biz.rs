@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{control::ControlBlock, core::req::{req_server, Payload, Resp}};
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct PresendReq {
     pub file_name: String,
     pub file_size: u64,
@@ -35,15 +35,15 @@ pub async fn presend(block: ControlBlock, file_name: &str, file_size: usize) -> 
     Ok(file_id)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct SendReq {
     pub file_id: u32,
     pub block_id: u64,
     pub block_checksum: u32,
-    pub block_payload: String,
+    pub block_payload: Vec<u8>,
 }
 
-pub async fn send(block: ControlBlock, file_id: u32, block_id: u64, block_checksum: u32, block_payload: String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn send(block: ControlBlock, file_id: u32, block_id: u64, block_checksum: u32, block_payload: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
     let req = SendReq {
         file_id,
         block_id,
@@ -66,7 +66,7 @@ pub async fn send(block: ControlBlock, file_id: u32, block_id: u64, block_checks
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct FinishReq {
     pub file_id: u32,
     pub file_checksum: u32,
@@ -126,7 +126,7 @@ pub async fn get_block_ids(block: ControlBlock, file_id: i32) -> Result<GetBlock
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct GetBlockReq {
     block_id: i32,
 }
@@ -171,7 +171,7 @@ pub async fn get_block(block: ControlBlock, block_id: i32) -> Option<GetBlockRes
     resp.content
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ListFileReq {
     filter: String
 }
@@ -214,7 +214,7 @@ pub async fn list_file(filter: String) -> Result<ListFileResp, Box<dyn std::erro
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct DeleteFileReq {
     file_id: i32,
 }
@@ -256,7 +256,7 @@ pub async fn ping() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct RegisterReq {
     pub user_name: String,
     pub password: String,
@@ -290,7 +290,7 @@ pub async fn register(block: &mut ControlBlock, user_name: String, password: Str
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct LoginReq {
     pub user_name: String,
     pub password: String,
@@ -343,4 +343,32 @@ pub async fn refresh(block: &mut ControlBlock) -> Result<(), Box<dyn std::error:
     };
 
     Ok(())
+}
+
+#[derive(Serialize, Debug)]
+pub struct GetFileInfoReq {
+    file_id: i32,
+}
+
+pub async fn get_file_info(file_id: i32) -> Result<FileInfo, Box<dyn std::error::Error>> {
+    let req = GetFileInfoReq {
+        file_id: file_id
+    };
+    
+    let payload= Payload {
+        method: "get_file_info".to_string(),
+        block: None,
+        content: Some(req),
+    };
+
+    let resp: Resp<FileInfo> = req_server(payload).await?;
+
+    if !resp.success {
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "get_file_info failed")));
+    }
+
+    match resp.content {
+        Some(file_info) => Ok(file_info),
+        None => Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "get_file_info failed"))),
+    }
 }

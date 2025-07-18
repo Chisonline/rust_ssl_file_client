@@ -1,15 +1,15 @@
 # RustSslFileClient
 
-For 学校的课程设计
+For School Homework
 
-Using RustOpenSsl+私有应用层协议
+Using RustOpenSsl + Private Application Layer Protocol
 
 ## Run
+
+Launch [Server](https://github.com/Chisonline/rust_ssl_file_server) first, then edit the config in src/main.rs
 
 ```bash
 cargo run
 ```
 
-## Server
-
-https://github.com/Chisonline/rust_ssl_file_server
+For more details, refer to the README.md of the Server.

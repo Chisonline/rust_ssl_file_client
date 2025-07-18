@@ -167,7 +167,7 @@ pub async fn list_file() {
                     file_id: file_info.id,
                     file_name: file_info.file_name.clone(),
                     file_size: file_info.file_size,
-                    upload_time: file_info.created_at.format("%Y0%m-%d %H:%M:%S").to_string(),
+                    upload_time: file_info.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
                 }
             }).collect::<Vec<_>>();
 

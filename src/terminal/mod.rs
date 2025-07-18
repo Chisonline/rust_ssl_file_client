@@ -67,7 +67,7 @@ async fn get_help_info() -> &'static DashMap<String, String> {
         let map = DashMap::new();
         map.insert("help".to_string(), "help      [args]                 : print help info".to_string());
         map.insert("delete".to_string(), "delete    [file_id]              : delete file from server".to_string());
-        map.insert("download".to_string(), "download  [file_id] [file_name]  : download file from server".to_string());
+        map.insert("download".to_string(), "download  [file_id] [file_path]  : download file from server".to_string());
         map.insert("exit".to_string(), "exit                             : exit terminal".to_string());
         map.insert("list_file".to_string(), "list_file [filter]               : list file in server, using filter as searching keyword".to_string());
         map.insert("login".to_string(), "login     [user_name] [password] : login to server".to_string());

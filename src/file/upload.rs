@@ -1,11 +1,22 @@
 use std::sync::Arc;
 
-use crc_fast::{checksum, checksum_combine, CrcAlgorithm::Crc32IsoHdlc};
-use tokio::{io::{self, AsyncReadExt, AsyncSeekExt}, sync:: Semaphore};
+use crc_fast::{checksum, checksum_file, CrcAlgorithm::Crc32IsoHdlc};
+use tokio::{
+    io::{self, AsyncReadExt, AsyncSeekExt},
+    sync::{Mutex, Semaphore},
+};
 
-use crate::{control::ControlBlock, core::{GB, KB, MB}, core::biz};
+use crate::{
+    control::ControlBlock,
+    core::biz,
+    core::{GB, KB, MB},
+};
 
-pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn upload(
+    block: ControlBlock,
+    file_name: &str,
+    path: String,
+) -> Result<(), Box<dyn std::error::Error>> {
     let metadata = tokio::fs::metadata(format!("{}/{}", path, file_name)).await?;
     let file_size = metadata.len() as usize;
     let granularity = calcu_granularity(file_size);
@@ -20,7 +31,8 @@ pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Resul
     let file_id = biz::presend(block_clone, file_name, file_size).await?;
 
     let mut block_id = 0;
-    let mut crc32 = 0;
+
+    let mutex_flag = Arc::new(Mutex::new(true));
 
     loop {
         let mut file_clone = file.try_clone().await?;
@@ -28,30 +40,50 @@ pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Resul
 
         buffer.clear();
 
-        let bytes_read = file_clone.take(granularity as u64).read_to_end(&mut buffer).await?;
+        let bytes_read = file_clone
+            .take(granularity as u64)
+            .read_to_end(&mut buffer)
+            .await?;
 
         if bytes_read == 0 {
             break;
         }
 
         position += bytes_read as u64;
-        let chunk_data = String::from_utf8_lossy(&buffer).into_owned();
 
-        let block_checksum = checksum(Crc32IsoHdlc, chunk_data.as_bytes());
-        crc32 = checksum_combine(Crc32IsoHdlc, crc32, block_checksum, bytes_read as u64);
+        let block_checksum = checksum(Crc32IsoHdlc, &buffer);
 
         let semaphore_clone = Arc::clone(&semaphore);
         let block_clone = block.clone();
+
+        let mutex_flag = mutex_flag.clone();
+        let data_use =  buffer.clone();
         
         let handle = tokio::task::spawn(async move {
             let _permit = semaphore_clone.acquire().await.unwrap();
+            let mut success = false;
             for _ in 0..3 {
-                let block_use = block_clone.clone();
-                let data_use = chunk_data.clone();
-                let rst = biz::send(block_use, file_id, block_id, block_checksum as u32, data_use).await;
-                if let Ok(_) = rst {
+                if !*mutex_flag.lock().await {
                     break;
                 }
+
+                let block_use = block_clone.clone();
+                let data_use =  data_use.clone();
+                let rst = biz::send(
+                    block_use,
+                    file_id,
+                    block_id,
+                    block_checksum as u32,
+                    data_use,
+                )
+                .await;
+                if let Ok(_) = rst {
+                    success = true;
+                    break;
+                }
+            }
+            if !success {
+                *mutex_flag.lock().await = false;
             }
         });
 
@@ -62,6 +94,16 @@ pub async fn upload(block: ControlBlock, file_name: &str, path: String) -> Resul
     for handle in handles {
         handle.await?;
     }
+
+    let flag = *mutex_flag.lock().await;
+    if !flag {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Upload failed",
+        )));
+    }
+
+    let crc32 = checksum_file(Crc32IsoHdlc, &format!("{}/{}", path, file_name), None)?;
 
     biz::finish(block, file_id, crc32 as u32).await
 }

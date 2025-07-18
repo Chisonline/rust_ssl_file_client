@@ -5,7 +5,8 @@ pub struct ClientConfig {
     pub cert_file: String,
     pub addr: String,
     pub port: u16,
-    pub domain: String
+    pub domain: String,
+    pub debug: bool,
 }
 
 static CONFIG: OnceCell<ClientConfig> = OnceCell::const_new();
